@@ -26,14 +26,24 @@ namespace kab3._4
         private bool isBarMoving = false; // Флаг для отслеживания того, что полоска перемещается мышью
 
 
+
         public Game()
         {
+            SetStyle(ControlStyles.DoubleBuffer | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
+
             InitializeStartButton(); // Инициализация кнопки "Старт"
-            circleSpeed = 10;
+            circleSpeed = 5;
             InitializeComponent();
+            this.MaximizeBox = false; // Запрещаем полноэкранный режим
+            this.ResumeLayout(false);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle; // Задаем стиль окна
+            this.ResumeLayout(false);
+                this.DoubleBuffered = false;
+
             InitializeTrackBar();
             InitializeThreads();
             barPosition = (ClientSize.Width - squareSize / 3) / 2;
+            this.FormClosing += Game_FormClosing;
         }
 
         private void InitializeTrackBar()
@@ -95,25 +105,29 @@ namespace kab3._4
             {
                 if (ballStarted)
                 {
-                    if (squareSize > 180) // Уменьшаем на 1/5 текущего размера
+                    if (squareSize > 190) // Уменьшаем на 1/5 текущего размера
                     {
                         squareSize -= 1;
                         trackBarBar.Maximum = ClientSize.Width - 50; // Обновляем максимальное значение ползунка
                     }
                     else
                     {
-                        Thread.Sleep(31);
+                        Thread.Sleep(250);
                         while (squareSize < 200)
                         {
                             squareSize += 1;
-                            Thread.Sleep(31);
+                            Thread.Sleep(250);
                         }
                     }
+
+                    // Проверяем столкновение шара с квадратом
+          
                 }
                 Invalidate();
-                Thread.Sleep(31);
+                Thread.Sleep(250);
             }
         }
+
 
         private void MoveBall()
         {
@@ -121,14 +135,48 @@ namespace kab3._4
             {
                 if (ballStarted)
                 {
-                    // Проверка столкновения шара с полоской
+                    // Проверяем столкновение шара с нижней полоской
                     if (ballY + ballSize >= (ClientSize.Height + squareSize) / 2 - 10)
                     {
-                        if (ballX + ballSize >= barPosition && ballX <= barPosition + squareSize / 3)
+                        // Вычисляем координаты полоски
+                        int barTop = (ClientSize.Height + squareSize) / 2 - 10; // Верхняя граница полоски
+                        int barBottom = barTop + 10; // Нижняя граница полоски
+                        int barLeft = barPosition; // Левая граница полоски
+                        int barRight = barPosition + squareSize / 3; // Правая граница полоски
+
+                        // Проверяем столкновение шара с полоской
+                        if (ballX + ballSize >= barLeft && ballX <= barRight && ballY + ballSize >= barTop)
                         {
-                            // Если шар касается полоски, меняем его направление движения вверх и увеличиваем скорость
-                            ballVelocityY = -ballVelocityY;
-                            ballVelocityX = rnd.Next(-6, 7); // Генерируем случайное значение скорости по оси X
+                            // Определяем центр полоски
+                            int barCenterX = barPosition + squareSize / 6;
+
+                            // Проверяем, попадает ли шарик в верхнюю часть полоски (верхняя треть)
+                            if (ballX + ballSize / 2 >= barLeft && ballX + ballSize / 2 <= barRight && ballY + ballSize / 2 <= barTop + (barBottom - barTop) / 3)
+                            {
+                                // Изменяем вертикальную скорость шарика на противоположную (отрицательную)
+                                ballVelocityY = -Math.Abs(ballVelocityY);
+                            }
+                            else
+                            {
+                                // Если шарик касается полоски, но не в верхней части, отражаем его по горизонтали, как раньше
+                                // Определяем угол нормали к поверхности полоски
+                                double normalAngle = Math.Atan2(barCenterX - ballX, (ClientSize.Height + squareSize) / 2 - ballY);
+
+                                // Определяем угол падения шара на поверхность полоски, но оставляем горизонтальное направление неизменным
+                                double incidenceAngle = Math.Atan2(ballVelocityY, ballVelocityX);
+
+                                // Определяем угол отражения от поверхности полоски, сохраняя горизонтальное направление неизменным
+                                double reflectionAngle = 2 * normalAngle - incidenceAngle;
+
+                                // Сохраняем модуль вертикальной скорости (по оси Y)
+                                double speedY = Math.Abs(ballVelocityY);
+
+                                // Вычисляем новое значение ballVelocityY на основе угла отражения с сохранением модуля скорости
+                                ballVelocityY = (int)Math.Round(speedY * Math.Sin(reflectionAngle));
+
+                                // Если шарик касается полоски, поднимаем его на расстояние, равное его диаметру, чтобы он не проваливался в полоску
+                                ballY = (ClientSize.Height + squareSize) / 2 - ballSize - 11;
+                            }
                         }
                         else
                         {
@@ -158,12 +206,21 @@ namespace kab3._4
                     // Обновляем координаты шарика
                     ballX += (int)distanceX;
                     ballY += (int)distanceY;
-
-                    Invalidate();
                 }
+                Invalidate();
                 Thread.Sleep(30); // Интервал времени между обновлениями координат шарика
             }
         }
+
+
+
+
+
+
+
+
+
+
 
 
         private void MoveBar()
@@ -182,6 +239,10 @@ namespace kab3._4
                         barPosition = trackBarBar.Value;
                     }
 
+                    // Ограничиваем положение полоски в пределах квадрата
+                    int maxBarPosition = ClientSize.Width - squareSize / 3;
+                    barPosition = Math.Max(0, Math.Min(maxBarPosition, barPosition));
+
                     // Перерисовываем форму
                     if (InvokeRequired)
                     {
@@ -198,11 +259,13 @@ namespace kab3._4
             }
         }
 
+
+
         private void StartButton_Click(object sender, EventArgs e)
         {
             ballStarted = true;
             // Начинаем новую игру
-            trackBarCircle.Value = trackBarCircle.Maximum / 2;
+            trackBarCircle.Value = trackBarCircle.Maximum / 3;
             circleSpeed = 10 * trackBarCircle.Value;
         }
 
@@ -241,16 +304,39 @@ namespace kab3._4
 
         private void TrackBarBar_ValueChanged(object sender, EventArgs e)
         {
-            // Обновляем положение полоски в соответствии с новым значением ползунка
-            barPosition = trackBarBar.Value;
+            // Логика обновления положения полоски
 
-            // Перерисовываем форму
-            Invalidate();
+            // Вычисляем максимальное значение для ползунка в зависимости от размеров квадрата и полоски
+            int maxSliderValue = squareSize - trackBarBar.Width;
+
+            // Ограничиваем ползунок, чтобы он не выходил за пределы квадрата
+            if (maxSliderValue >= 0)
+            {
+                if (trackBarBar.InvokeRequired)
+                {
+                    trackBarBar.Invoke(new MethodInvoker(delegate { trackBarBar.Maximum = maxSliderValue; }));
+                }
+            }
+            else
+            {
+                if (trackBarBar.InvokeRequired)
+                {
+                    trackBarBar.Invoke(new MethodInvoker(delegate { trackBarBar.Maximum = 0; }));
+                }
+            }
         }
+
 
         private void TrackBar_ValueChanged(object sender, EventArgs e)
         {
             circleSpeed = 10 * trackBarCircle.Value;
+        }
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            using (SolidBrush brush = new SolidBrush(Color.White))
+            {
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+            }
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -270,15 +356,30 @@ namespace kab3._4
             int barHeight = 10; // Bar height
             int barY = (ClientSize.Height + squareSize) / 2 - barHeight; // Bar position on Y-axis
 
-            int maxBarPosition = ClientSize.Width - barWidth; // Maximum position for the bar
+            // Calculate the visible portion of the bar
+            int visibleBarWidth = Math.Min(barWidth, squareSize - Math.Abs(barPosition - (ClientSize.Width - squareSize) / 2));
+            int visibleBarX = barPosition < (ClientSize.Width - squareSize) / 2 ? (ClientSize.Width - squareSize) / 2 : barPosition;
 
-            // Calculate bar position within the available range
-            int clampedBarPosition = Math.Max(0, Math.Min(maxBarPosition, barPosition));
-
-            // Draw the bar
-            Rectangle barRect = new Rectangle(clampedBarPosition, barY, barWidth, barHeight);
-            e.Graphics.FillRectangle(Brushes.Blue, barRect);
+            // Draw the visible portion of the bar only if it's inside the square
+            if (barPosition + squareSize / 3 >= (ClientSize.Width - squareSize) / 2 && barPosition <= (ClientSize.Width + squareSize) / 2)
+            {
+                Rectangle barRect = new Rectangle(visibleBarX, barY, visibleBarWidth, barHeight);
+                e.Graphics.FillRectangle(Brushes.Blue, barRect);
+            }
         }
+
+        private void Game_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Дожидаемся завершения всех потоков
+            squareThread.Join();
+            ballThread.Join();
+            barThread.Join();
+
+           squareThread.Abort();
+           ballThread.Abort();
+           barThread.Abort();
+        }
+
 
 
 
