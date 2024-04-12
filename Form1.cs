@@ -46,6 +46,19 @@ namespace kab3._4
             this.FormClosing += Game_FormClosing;
         }
 
+        private bool IsBallNearSquare(int x, int y)
+        {
+            int squareX = (ClientSize.Width - squareSize) / 2;
+            int squareY = (ClientSize.Height - squareSize) / 2;
+            int squareCenterX = squareX + squareSize / 2;
+            int squareCenterY = squareY + squareSize / 2;
+
+            double distance = Math.Sqrt(Math.Pow(x - squareCenterX, 2) + Math.Pow(y - squareCenterY, 2));
+
+            return distance < 10; // Здесь 10 - это минимальное допустимое расстояние между квадратом и шариком
+        }
+
+
         private void InitializeTrackBar()
         {
             trackBarCircle = new TrackBar();
@@ -65,6 +78,8 @@ namespace kab3._4
             trackBarBar.Value = (trackBarBar.Maximum - trackBarBar.Minimum) / 2; // Начальное значение положения полоски
             trackBarBar.ValueChanged += TrackBarBar_ValueChanged; // Обработчик события изменения значения
             Controls.Add(trackBarBar); // Добавление TrackBar на форму
+            trackBarBar.KeyDown += trackBarBar_KeyDown;
+
         }
 
         private void InitializeStartButton()
@@ -103,30 +118,65 @@ namespace kab3._4
         {
             while (true)
             {
-                if (ballStarted)
+                if (ballStarted && !IsBallNearSquare(ballX + ballSize / 2, ballY + ballSize / 2))
                 {
-                    if (squareSize > 190) // Уменьшаем на 1/5 текущего размера
+                    // Проверяем, находится ли шар близко к границе квадрата
+                    bool ballNearBorder = ballX <= (ClientSize.Width - squareSize) / 2 + 20 || ballX + ballSize >= (ClientSize.Width + squareSize) / 2 - 20 ||
+                                          ballY <= (ClientSize.Height - squareSize) / 2 + 20 || ballY + ballSize >= (ClientSize.Height + squareSize) / 2 - 20;
+
+                    if (squareSize > 170 && !ballNearBorder)
                     {
                         squareSize -= 1;
-                        trackBarBar.Maximum = ClientSize.Width - 50; // Обновляем максимальное значение ползунка
+                        trackBarBar.Maximum = ClientSize.Width - 50;
                     }
-                    else
+                    else if (!ballNearBorder)
                     {
-                        Thread.Sleep(250);
+                        Thread.Sleep(500);
                         while (squareSize < 200)
                         {
                             squareSize += 1;
-                            Thread.Sleep(250);
+                            Thread.Sleep(500);
                         }
                     }
-
-                    // Проверяем столкновение шара с квадратом
-          
                 }
+
                 Invalidate();
-                Thread.Sleep(250);
+                Thread.Sleep(500);
             }
         }
+
+        private void trackBarBar_KeyDown(object sender, KeyEventArgs e)
+        {
+            // Проверяем, нажата ли клавиша влево или вправо
+            if (e.KeyCode == Keys.Left)
+            {
+                // Изменяем положение ползунка влево
+                if (trackBarBar.Value > trackBarBar.Minimum && !IsBarTouchingLeftBoundary())
+                {
+                    trackBarBar.Value -= 5;
+                }
+            }
+            else if (e.KeyCode == Keys.Right)
+            {
+                // Изменяем положение ползунка вправо
+                if (trackBarBar.Value < trackBarBar.Maximum && !IsBarTouchingRightBoundary())
+                {
+                    trackBarBar.Value += 5;
+                }
+            }
+        }
+
+        private bool IsBarTouchingLeftBoundary()
+        {
+            return barPosition <= (ClientSize.Width - squareSize) / 2;
+        }
+
+        private bool IsBarTouchingRightBoundary()
+        {
+            return barPosition + squareSize / 3 >= (ClientSize.Width + squareSize) / 2;
+        }
+
+
 
 
         private void MoveBall()
@@ -302,14 +352,33 @@ namespace kab3._4
         }
 
 
+        // Глобальная переменная для хранения предыдущего значения ползунка
+        private int previousSliderValue = 0;
+
         private void TrackBarBar_ValueChanged(object sender, EventArgs e)
         {
-            // Логика обновления положения полоски
+            // Проверяем, касается ли полоска правого угла квадрата или задевает его
+            bool touchingRightCorner = barPosition + squareSize / 3 >= (ClientSize.Width + squareSize) / 2;
 
-            // Вычисляем максимальное значение для ползунка в зависимости от размеров квадрата и полоски
+            // Проверяем, касается ли полоска левого угла квадрата или задевает его
+            bool touchingLeftCorner = barPosition <= (ClientSize.Width - squareSize) / 2;
+
+            // Если полоска касается правого угла квадрата, разрешаем ей перемещаться влево
+            if (touchingRightCorner && trackBarBar.Value > previousSliderValue)
+            {
+                trackBarBar.Value = previousSliderValue;
+                return;
+            }
+
+            // Если полоска касается левого угла квадрата, разрешаем ей перемещаться вправо
+            if (touchingLeftCorner && trackBarBar.Value < previousSliderValue)
+            {
+                trackBarBar.Value = previousSliderValue;
+                return;
+            }
+
+            // Если ни с одного из углов квадрата полоска не касается, изменяем максимальное значение ползунка
             int maxSliderValue = squareSize - trackBarBar.Width;
-
-            // Ограничиваем ползунок, чтобы он не выходил за пределы квадрата
             if (maxSliderValue >= 0)
             {
                 if (trackBarBar.InvokeRequired)
@@ -324,7 +393,17 @@ namespace kab3._4
                     trackBarBar.Invoke(new MethodInvoker(delegate { trackBarBar.Maximum = 0; }));
                 }
             }
+
+            // Если значение ползунка изменилось пользователем и полоска не касается краев квадрата,
+            // сохраняем текущее значение ползунка
+            if (trackBarBar.Value != previousSliderValue && !touchingRightCorner && !touchingLeftCorner)
+            {
+                previousSliderValue = trackBarBar.Value;
+            }
         }
+
+
+
 
 
         private void TrackBar_ValueChanged(object sender, EventArgs e)
@@ -360,24 +439,37 @@ namespace kab3._4
             int visibleBarWidth = Math.Min(barWidth, squareSize - Math.Abs(barPosition - (ClientSize.Width - squareSize) / 2));
             int visibleBarX = barPosition < (ClientSize.Width - squareSize) / 2 ? (ClientSize.Width - squareSize) / 2 : barPosition;
 
-            // Draw the visible portion of the bar only if it's inside the square
-            if (barPosition + squareSize / 3 >= (ClientSize.Width - squareSize) / 2 && barPosition <= (ClientSize.Width + squareSize) / 2)
+            // Ensure that the bar does not extend beyond the square boundaries
+            if (visibleBarX < (ClientSize.Width - squareSize) / 2)
+            {
+                visibleBarWidth -= ((ClientSize.Width - squareSize) / 2 - visibleBarX);
+                visibleBarX = (ClientSize.Width - squareSize) / 2;
+            }
+            else if (visibleBarX + visibleBarWidth > (ClientSize.Width + squareSize) / 2)
+            {
+                visibleBarWidth -= (visibleBarX + visibleBarWidth - (ClientSize.Width + squareSize) / 2);
+            }
+
+            // Draw the visible portion of the bar
+            if (visibleBarWidth > 0)
             {
                 Rectangle barRect = new Rectangle(visibleBarX, barY, visibleBarWidth, barHeight);
                 e.Graphics.FillRectangle(Brushes.Blue, barRect);
             }
         }
 
+
         private void Game_FormClosing(object sender, FormClosingEventArgs e)
         {
+            squareThread.Abort();
+            ballThread.Abort();
+            barThread.Abort();
             // Дожидаемся завершения всех потоков
             squareThread.Join();
             ballThread.Join();
             barThread.Join();
 
-           squareThread.Abort();
-           ballThread.Abort();
-           barThread.Abort();
+          
         }
 
 
